@@ -36,7 +36,7 @@ class ControllerGenerator extends Generator
     public function generate(BundleInterface $bundle, $controller, $routeFormat, $templateFormat, array $actions = array())
     {
         $dir = $bundle->getPath();
-        $controllerFile = $dir.'/Controller/'.$controller.'Controller.php';
+        $controllerFile = $dir.'/Controller/Crud/'.$controller.'Controller.php';
         if (file_exists($controllerFile)) {
             throw new \RuntimeException(sprintf('Controller "%s" already exists', $controller));
         }
@@ -64,9 +64,9 @@ class ControllerGenerator extends Generator
             }
 
             if ('twig' == $templateFormat) {
-                $this->renderFile('controller/Template.html.twig.twig', $dir.'/Resources/views/'.$this->parseTemplatePath($template), $params);
+                $this->renderFile('controller/Template.html.twig.twig', $dir.'/Resources/views/Crud/'.$this->parseTemplatePath($template), $params);
             } else {
-                $this->renderFile('controller/Template.html.php.twig', $dir.'/Resources/views/'.$this->parseTemplatePath($template), $params);
+                $this->renderFile('controller/Template.html.php.twig', $dir.'/Resources/views/Crud/'.$this->parseTemplatePath($template), $params);
             }
 
             $this->generateRouting($bundle, $controller, $actions[$i], $routeFormat);

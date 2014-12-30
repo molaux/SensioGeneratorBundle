@@ -66,11 +66,16 @@ class DoctrineCrudGenerator extends Generator
         $this->entity   = $entity;
         $this->bundle   = $bundle;
         $this->metadata = $metadata;
+        $this->mappings = array();
+        foreach($metadata->getAssociationMappings() as $field => $meta) {
+          if(!empty($meta["joinColumns"][0]["name"])) {
+            $this->mappings[$meta["joinColumns"][0]["name"]]['entity_field'] = $meta['fieldName'];
+          }
+        }
         $this->setFormat($format);
-
         $this->generateControllerClass($forceOverwrite);
 
-        $dir = sprintf('%s/Resources/views/%s', $this->bundle->getPath(), str_replace('\\', '/', $this->entity));
+        $dir = sprintf('%s/Resources/views/Crud/%s', $this->bundle->getPath(), str_replace('\\', '/', $this->entity));
 
         if (!file_exists($dir)) {
             $this->filesystem->mkdir($dir, 0777);
@@ -153,7 +158,7 @@ class DoctrineCrudGenerator extends Generator
         $entityNamespace = implode('\\', $parts);
 
         $target = sprintf(
-            '%s/Controller/%s/%sController.php',
+            '%s/Controller/Crud/%s/%sController.php',
             $dir,
             str_replace('\\', '/', $entityNamespace),
             $entityClass
@@ -214,6 +219,7 @@ class DoctrineCrudGenerator extends Generator
             'entity'            => $this->entity,
             'identifier'        => $this->metadata->identifier[0],
             'fields'            => $this->metadata->fieldMappings,
+            'mappings'          => $this->mappings,
             'actions'           => $this->actions,
             'record_actions'    => $this->getRecordActions(),
             'route_prefix'      => $this->routePrefix,
@@ -233,6 +239,7 @@ class DoctrineCrudGenerator extends Generator
             'entity'            => $this->entity,
             'identifier'        => $this->metadata->identifier[0],
             'fields'            => $this->metadata->fieldMappings,
+            'mappings'          => $this->mappings,
             'actions'           => $this->actions,
             'route_prefix'      => $this->routePrefix,
             'route_name_prefix' => $this->routeNamePrefix,
