@@ -60,7 +60,7 @@ class ControllerGenerator extends Generator
             // create a template
             $template = $actions[$i]['template'];
             if ('default' == $template) {
-                $template = $bundle->getName().':'.$controller.':'.substr($action['name'], 0, -6).'.html.'.$templateFormat;
+                $template = $bundle->getName().':Crud\\'.$controller.':'.substr($action['name'], 0, -6).'.html.'.$templateFormat;
             }
 
             if ('twig' == $templateFormat) {
@@ -92,7 +92,7 @@ class ControllerGenerator extends Generator
             mkdir($dir);
         }
 
-        $controller = $bundle->getName().':'.$controller.':'.$action['basename'];
+        $controller = $bundle->getName().':Crud\\'.$controller.':'.$action['basename'];
         $name = strtolower(preg_replace('/([A-Z])/', '_\\1', $action['basename']));
 
         if ('yml' == $format) {

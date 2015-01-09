@@ -14,6 +14,7 @@ namespace Sensio\Bundle\GeneratorBundle\Generator;
 use Symfony\Component\Filesystem\Filesystem;
 use Symfony\Component\HttpKernel\Bundle\BundleInterface;
 use Doctrine\ORM\Mapping\ClassMetadataInfo;
+use Doctrine\Bundle\DoctrineBundle\Mapping\DisconnectedMetadataFactory;
 
 /**
  * Generates a CRUD controller.
@@ -23,6 +24,7 @@ use Doctrine\ORM\Mapping\ClassMetadataInfo;
 class DoctrineCrudGenerator extends Generator
 {
     protected $filesystem;
+    protected $doctrine;
     protected $routePrefix;
     protected $routeNamePrefix;
     protected $bundle;
@@ -36,9 +38,10 @@ class DoctrineCrudGenerator extends Generator
      *
      * @param Filesystem $filesystem A Filesystem instance
      */
-    public function __construct(Filesystem $filesystem)
+    public function __construct(Filesystem $filesystem, $doctrine)
     {
         $this->filesystem  = $filesystem;
+        $this->doctrine  = $doctrine;
     }
 
     /**
@@ -66,12 +69,39 @@ class DoctrineCrudGenerator extends Generator
         $this->entity   = $entity;
         $this->bundle   = $bundle;
         $this->metadata = $metadata;
+        
+        $this->fields = $metadata->fieldMappings;
+        echo "BBBBBBBBBBBBBEEEEEEEEEEEEEEEEEGGGGGGGGGGGGGGGGGGGGGGGGGIIIIIIIIIIIIINNNNNNNNNNNNNNNNNN : $entity\n";
+        var_dump($this->fields);
+        
         $this->mappings = array();
         foreach($metadata->getAssociationMappings() as $field => $meta) {
-          if(!empty($meta["joinColumns"][0]["name"])) {
-            $this->mappings[$meta["joinColumns"][0]["name"]]['entity_field'] = $meta['fieldName'];
+          echo $field."\n";
+          var_dump($meta);
+          switch($meta["type"]) {
+            case ClassMetadataInfo::ONE_TO_ONE : 
+              if(!$meta['isOwningSide']) {
+                $this->fields[$meta['fieldName']] = array('type' => '1to1', 'class' => (new \ReflectionClass($meta["targetEntity"]))->getShortName());
+              }
+              break;
+            case ClassMetadataInfo::ONE_TO_MANY : 
+              $fmeta = $this->getEntityMetadata($meta["targetEntity"])[0];
+              $col = $fmeta->getAssociationMappings()[$meta["mappedBy"]]['joinColumns'][0]['name'];
+              $this->fields[$meta['fieldName']] = array(
+                'type' => '1tom', 
+                'class' => (new \ReflectionClass($meta["targetEntity"]))->getShortName(),
+                'column' => $col
+              );
+              break;
+            case ClassMetadataInfo::MANY_TO_ONE : 
+              unset($this->fields[$meta["joinColumns"][0]["name"]]);
+              $this->fields[$meta['fieldName']] = array('type' => 'mto1', 'class' => (new \ReflectionClass($meta["targetEntity"]))->getShortName());
+              break;
+            case ClassMetadataInfo::MANY_TO_MANY : 
+              break;
           }
         }
+        
         $this->setFormat($format);
         $this->generateControllerClass($forceOverwrite);
 
@@ -218,7 +248,7 @@ class DoctrineCrudGenerator extends Generator
             'bundle'            => $this->bundle->getName(),
             'entity'            => $this->entity,
             'identifier'        => $this->metadata->identifier[0],
-            'fields'            => $this->metadata->fieldMappings,
+            'fields'            => $this->fields,
             'mappings'          => $this->mappings,
             'actions'           => $this->actions,
             'record_actions'    => $this->getRecordActions(),
@@ -291,4 +321,12 @@ class DoctrineCrudGenerator extends Generator
             return in_array($item, array('show', 'edit'));
         });
     }
+    
+    protected function getEntityMetadata($entity)
+    {
+        $factory = new DisconnectedMetadataFactory($this->doctrine);
+
+        return $factory->getClassMetadata($entity)->getMetadata();
+    }
+
 }
