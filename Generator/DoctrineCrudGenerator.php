@@ -80,21 +80,29 @@ class DoctrineCrudGenerator extends Generator
           var_dump($meta);
           switch($meta["type"]) {
             case ClassMetadataInfo::ONE_TO_ONE : 
-              if(!$meta['isOwningSide']) {
-                $this->fields[$meta['fieldName']] = array('type' => '1to1', 'class' => (new \ReflectionClass($meta["targetEntity"]))->getShortName());
+              $this->fields[$meta['fieldName']] = array('type' => '1to1', 'class' => (new \ReflectionClass($meta["targetEntity"]))->getShortName());
+              if($meta['isOwningSide']) {
+                foreach($meta["joinColumns"] as $col)
+                  if(!$metadata->isIdentifier($col["name"]))
+                    unset($this->fields[$col["name"]]);
               }
               break;
             case ClassMetadataInfo::ONE_TO_MANY : 
               $fmeta = $this->getEntityMetadata($meta["targetEntity"])[0];
-              $col = $fmeta->getAssociationMappings()[$meta["mappedBy"]]['joinColumns'][0]['name'];
+              $cols = array();
+              foreach($fmeta->getAssociationMappings()[$meta["mappedBy"]]['joinColumns'] as $col)
+                $cols[] = $col['name'];
+              
               $this->fields[$meta['fieldName']] = array(
                 'type' => '1tom', 
                 'class' => (new \ReflectionClass($meta["targetEntity"]))->getShortName(),
-                'column' => $col
+                'column' => implode(',', $cols),
               );
               break;
             case ClassMetadataInfo::MANY_TO_ONE : 
-              unset($this->fields[$meta["joinColumns"][0]["name"]]);
+              foreach($meta["joinColumns"] as $col)
+                if(!$metadata->isIdentifier($col["name"]))
+                  unset($this->fields[$col["name"]]);
               $this->fields[$meta['fieldName']] = array('type' => 'mto1', 'class' => (new \ReflectionClass($meta["targetEntity"]))->getShortName());
               break;
             case ClassMetadataInfo::MANY_TO_MANY : 
@@ -268,7 +276,7 @@ class DoctrineCrudGenerator extends Generator
             'bundle'            => $this->bundle->getName(),
             'entity'            => $this->entity,
             'identifier'        => $this->metadata->identifier[0],
-            'fields'            => $this->metadata->fieldMappings,
+            'fields'            => $this->fields,
             'mappings'          => $this->mappings,
             'actions'           => $this->actions,
             'route_prefix'      => $this->routePrefix,
