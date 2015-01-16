@@ -69,38 +69,93 @@ class DoctrineCrudGenerator extends Generator
         $this->entity   = $entity;
         $this->bundle   = $bundle;
         $this->metadata = $metadata;
-        
         $this->fields = $metadata->fieldMappings;
-        
         $this->mappings = array();
+        
         foreach($metadata->getAssociationMappings() as $field => $meta) {
+        
           switch($meta["type"]) {
+          
             case ClassMetadataInfo::ONE_TO_ONE : 
-              $this->fields[$meta['fieldName']] = array('type' => '1to1', 'class' => (new \ReflectionClass($meta["targetEntity"]))->getShortName());
-              if($meta['isOwningSide']) {
-                foreach($meta["joinColumns"] as $col)
-                  if(!$metadata->isIdentifier($col["name"]))
-                    unset($this->fields[$col["name"]]);
+            
+              $cols = array();
+              $isOwningSide = $meta['isOwningSide'];
+              $oMeta = $meta;
+              
+              if(!$isOwningSide)
+                $meta = $this->getEntityMetadata($meta["targetEntity"])[0]->getAssociationMappings()[$meta["mappedBy"]];
+                
+              foreach($meta["joinColumns"] as $col) {
+              
+                $from = $isOwningSide?$col["name"]:$col['referencedColumnName'];
+                $to = $isOwningSide?$col["referencedColumnName"]:$col['name'];
+                
+                if($isOwningSide && !$metadata->isIdentifier($from))
+                  unset($this->fields[$from]);
+                  
+                $cols[] = array(
+                  'from' => $from, 
+                  'to'   => $to
+                );
+                
               }
+              
+              $this->fields[$oMeta['fieldName']] = array(
+                'type'    => '1to1', 
+                'class'   => (new \ReflectionClass($oMeta["targetEntity"]))->getShortName(),
+                'mapping' => $cols,
+              );
+
               break;
+              
+              
             case ClassMetadataInfo::ONE_TO_MANY : 
+            
               $fmeta = $this->getEntityMetadata($meta["targetEntity"])[0];
               $cols = array();
+              
               foreach($fmeta->getAssociationMappings()[$meta["mappedBy"]]['joinColumns'] as $col)
-                $cols[] = $col['name'];
+                $cols[] = array(
+                  'from' => $col['referencedColumnName'], 
+                  'to'   => $col['name']
+                );
               
               $this->fields[$meta['fieldName']] = array(
-                'type' => '1tom', 
-                'class' => (new \ReflectionClass($meta["targetEntity"]))->getShortName(),
-                'column' => implode(',', $cols),
+                'type'    => '1tom', 
+                'class'   => (new \ReflectionClass($meta["targetEntity"]))->getShortName(),
+                'mapping' => $cols,
               );
+              
               break;
+              
+              
             case ClassMetadataInfo::MANY_TO_ONE : 
-              foreach($meta["joinColumns"] as $col)
+            
+              $cols = array();
+              
+              foreach($meta["joinColumns"] as $col) {
+              
                 if(!$metadata->isIdentifier($col["name"]))
                   unset($this->fields[$col["name"]]);
-              $this->fields[$meta['fieldName']] = array('type' => 'mto1', 'class' => (new \ReflectionClass($meta["targetEntity"]))->getShortName());
+                  
+                $cols[] = array(
+                  'from' => $col['name'], 
+                  'to'   => $col['referencedColumnName']
+                );
+                
+              }
+              
+              $this->fields[$meta['fieldName']] = array(
+                'type'    => 'mto1', 
+                'class'   => (new \ReflectionClass($meta["targetEntity"]))->getShortName(),
+                'mapping' => $cols,
+              );
+              
+              
+              
               break;
+              
+              
             case ClassMetadataInfo::MANY_TO_MANY : 
               break;
           }
