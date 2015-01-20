@@ -105,10 +105,16 @@ class DoctrineFormGenerator extends Generator
         foreach($fields as $field)
           $fieldsInfos[$field] = $metadata->getFieldMapping($field);
           
-        foreach ($metadata->associationMappings as $fieldName => $relation) {
+        foreach ($metadata->getAssociationMappings() as $fieldName => $relation) {
             if ($relation['type'] !== ClassMetadataInfo::ONE_TO_MANY) {
                 $fieldsInfos[$fieldName] = array('type' => $relation['type']);
             }
+            if ($relation['type'] === ClassMetadataInfo::MANY_TO_ONE) {
+              foreach($relation["joinColumns"] as $col) {
+                if(!$metadata->isIdentifier($col["name"]))
+                  unset($fieldsInfos[$col["name"]]);
+              }
+           }
         }
         
         
