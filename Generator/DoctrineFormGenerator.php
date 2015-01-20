@@ -100,13 +100,19 @@ class DoctrineFormGenerator extends Generator
         if (!$metadata->isIdentifierNatural()) {
             $fields = array_diff($fields, $metadata->identifier);
         }
-
+        
+        $fieldsInfos = array();
+        foreach($fields as $field)
+          $fieldsInfos[$field] = $metadata->getFieldMapping($field);
+          
         foreach ($metadata->associationMappings as $fieldName => $relation) {
             if ($relation['type'] !== ClassMetadataInfo::ONE_TO_MANY) {
-                $fields[] = $fieldName;
+                $fieldsInfos[$fieldName] = array('type' => $relation['type']);
             }
         }
+        
+        
 
-        return $fields;
+        return $fieldsInfos;
     }
 }

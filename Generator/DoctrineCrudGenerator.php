@@ -326,6 +326,7 @@ class DoctrineCrudGenerator extends Generator
      */
     protected function generateIndexView($dir)
     {
+      if(!file_exists($dir.'/index.html.twig'))
         $this->renderFile('crud/views/index.html.twig.twig', $dir.'/index.html.twig', array(
             'bundle'            => $this->bundle->getName(),
             'entity'            => $this->entity,
@@ -337,6 +338,18 @@ class DoctrineCrudGenerator extends Generator
             'route_prefix'      => $this->routePrefix,
             'route_name_prefix' => $this->routeNamePrefix,
         ));
+
+      $this->renderFile('crud/views/base/index.html.twig.twig', $dir.'/base/index.html.twig', array(
+          'bundle'            => $this->bundle->getName(),
+          'entity'            => $this->entity,
+          'identifier'        => $this->metadata->identifier,
+          'fields'            => $this->fields,
+          'mappings'          => $this->mappings,
+          'actions'           => $this->actions,
+          'record_actions'    => $this->getRecordActions(),
+          'route_prefix'      => $this->routePrefix,
+          'route_name_prefix' => $this->routeNamePrefix,
+      ));
     }
 
     /**
@@ -346,6 +359,7 @@ class DoctrineCrudGenerator extends Generator
      */
     protected function generateShowView($dir)
     {
+      if(!file_exists($dir.'/show.html.twig'))
         $this->renderFile('crud/views/show.html.twig.twig', $dir.'/show.html.twig', array(
             'bundle'            => $this->bundle->getName(),
             'entity'            => $this->entity,
@@ -356,6 +370,16 @@ class DoctrineCrudGenerator extends Generator
             'route_prefix'      => $this->routePrefix,
             'route_name_prefix' => $this->routeNamePrefix,
         ));
+      $this->renderFile('crud/views/base/show.html.twig.twig', $dir.'/base/show.html.twig', array(
+          'bundle'            => $this->bundle->getName(),
+          'entity'            => $this->entity,
+          'identifier'        => $this->metadata->identifier,
+          'fields'            => $this->fields,
+          'mappings'          => $this->mappings,
+          'actions'           => $this->actions,
+          'route_prefix'      => $this->routePrefix,
+          'route_name_prefix' => $this->routeNamePrefix,
+      ));
     }
 
     /**
@@ -365,6 +389,7 @@ class DoctrineCrudGenerator extends Generator
      */
     protected function generateNewView($dir)
     {
+      if(!file_exists($dir.'/new.html.twig'))
         $this->renderFile('crud/views/new.html.twig.twig', $dir.'/new.html.twig', array(
             'bundle'            => $this->bundle->getName(),
             'entity'            => $this->entity,
@@ -372,6 +397,13 @@ class DoctrineCrudGenerator extends Generator
             'route_name_prefix' => $this->routeNamePrefix,
             'actions'           => $this->actions,
         ));
+      $this->renderFile('crud/views/base/new.html.twig.twig', $dir.'/base/new.html.twig', array(
+          'bundle'            => $this->bundle->getName(),
+          'entity'            => $this->entity,
+          'route_prefix'      => $this->routePrefix,
+          'route_name_prefix' => $this->routeNamePrefix,
+          'actions'           => $this->actions,
+      ));
     }
 
     /**
@@ -381,6 +413,7 @@ class DoctrineCrudGenerator extends Generator
      */
     protected function generateEditView($dir)
     {
+      if(!file_exists($dir.'/edit.html.twig'))
         $this->renderFile('crud/views/edit.html.twig.twig', $dir.'/edit.html.twig', array(
             'route_prefix'      => $this->routePrefix,
             'route_name_prefix' => $this->routeNamePrefix,
@@ -390,6 +423,15 @@ class DoctrineCrudGenerator extends Generator
             'bundle'            => $this->bundle->getName(),
             'actions'           => $this->actions,
         ));
+      $this->renderFile('crud/views/base/edit.html.twig.twig', $dir.'/base/edit.html.twig', array(
+          'route_prefix'      => $this->routePrefix,
+          'route_name_prefix' => $this->routeNamePrefix,
+          'identifier'        => $this->metadata->identifier,
+          'entity'            => $this->entity,
+          'fields'            => $this->metadata->fieldMappings,
+          'bundle'            => $this->bundle->getName(),
+          'actions'           => $this->actions,
+      ));
     }
 
     /**
