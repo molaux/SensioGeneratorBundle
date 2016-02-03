@@ -15,6 +15,7 @@ use Symfony\Component\Filesystem\Filesystem;
 use Symfony\Component\HttpKernel\Bundle\BundleInterface;
 use Doctrine\ORM\Mapping\ClassMetadataInfo;
 use Doctrine\Common\Inflector\Inflector;
+use Doctrine\Bundle\DoctrineBundle\Mapping\DisconnectedMetadataFactory;
 
 /**
  * Generates a CRUD controller.
@@ -25,6 +26,7 @@ class DoctrineCrudGenerator extends Generator
 {
     protected $filesystem;
     protected $rootDir;
+    protected $doctrine;
     protected $routePrefix;
     protected $routeNamePrefix;
     protected $bundle;
@@ -41,10 +43,11 @@ class DoctrineCrudGenerator extends Generator
      * @param Filesystem $filesystem A Filesystem instance
      * @param string     $rootDir    The root dir
      */
-    public function __construct(Filesystem $filesystem, $rootDir)
+    public function __construct(Filesystem $filesystem, $rootDir, $doctrine)
     {
         $this->filesystem = $filesystem;
         $this->rootDir = $rootDir;
+        $this->doctrine  = $doctrine;
     }
 
     /**
@@ -65,8 +68,8 @@ class DoctrineCrudGenerator extends Generator
         $this->routeNamePrefix = self::getRouteNamePrefix($routePrefix);
         $this->actions = $needWriteActions ? array('index', 'show', 'new', 'edit', 'delete') : array('index', 'show');
 
-        if (count($metadata->identifier) != 1) {
-            throw new \RuntimeException('The CRUD generator does not support entity classes with multiple or no primary keys.');
+        if (!count($metadata->identifier)) {
+            throw new \RuntimeException('The CRUD generator does not support entity classes without any primary key.');
         }
 
         $this->entity = $entity;
@@ -74,11 +77,102 @@ class DoctrineCrudGenerator extends Generator
         $this->entityPluralized = lcfirst(Inflector::pluralize($entity));
         $this->bundle = $bundle;
         $this->metadata = $metadata;
-        $this->setFormat($format);
+        $this->fields = $metadata->fieldMappings;
+        $this->mappings = array();
+        
+        foreach($metadata->getAssociationMappings() as $field => $meta) {
+        
+          switch($meta["type"]) {
+          
+            case ClassMetadataInfo::ONE_TO_ONE : 
+            
+              $cols = array();
+              $isOwningSide = $meta['isOwningSide'];
+              $oMeta = $meta;
+              
+              if(!$isOwningSide)
+                $meta = $this->getEntityMetadata($meta["targetEntity"])[0]->getAssociationMappings()[$meta["mappedBy"]];
+                
+              foreach($meta["joinColumns"] as $col) {
+              
+                $from = $isOwningSide?$col["name"]:$col['referencedColumnName'];
+                $to = $isOwningSide?$col["referencedColumnName"]:$col['name'];
+                
+                if($isOwningSide && !$metadata->isIdentifier($from))
+                  unset($this->fields[$from]);
+                  
+                $cols[] = array(
+                  'from' => $from, 
+                  'to'   => $to
+                );
+                
+              }
+              
+              $this->fields[$oMeta['fieldName']] = array(
+                'type'    => '1to1', 
+                'class'   => (new \ReflectionClass($oMeta["targetEntity"]))->getShortName(),
+                'mapping' => $cols,
+              );
 
+              break;
+              
+              
+            case ClassMetadataInfo::ONE_TO_MANY : 
+            
+              $fmeta = $this->getEntityMetadata($meta["targetEntity"])[0];
+              $cols = array();
+              
+              foreach($fmeta->getAssociationMappings()[$meta["mappedBy"]]['joinColumns'] as $col)
+                $cols[] = array(
+                  'from' => $col['referencedColumnName'], 
+                  'to'   => $col['name']
+                );
+              
+              $this->fields[$meta['fieldName']] = array(
+                'type'    => '1tom', 
+                'class'   => (new \ReflectionClass($meta["targetEntity"]))->getShortName(),
+                'mapping' => $cols,
+              );
+              
+              break;
+              
+              
+            case ClassMetadataInfo::MANY_TO_ONE : 
+            
+              $cols = array();
+              
+              foreach($meta["joinColumns"] as $col) {
+              
+                if(!$metadata->isIdentifier($col["name"]))
+                  unset($this->fields[$col["name"]]);
+                  
+                $cols[] = array(
+                  'from' => $col['name'], 
+                  'to'   => $col['referencedColumnName']
+                );
+                
+              }
+              
+              $this->fields[$meta['fieldName']] = array(
+                'type'    => 'mto1', 
+                'class'   => (new \ReflectionClass($meta["targetEntity"]))->getShortName(),
+                'mapping' => $cols,
+              );
+              
+              
+              
+              break;
+              
+              
+            case ClassMetadataInfo::MANY_TO_MANY : 
+              break;
+          }
+        }
+        
+        $this->setFormat($format);
         $this->generateControllerClass($forceOverwrite);
 
-        $dir = sprintf('%s/Resources/views/%s', $this->rootDir, str_replace('\\', '/', strtolower($this->entity)));
+        $dir = sprintf('%s/Resources/views/Crud/%s', $this->bundle->getPath(), str_replace('\\', '/', $this->entity));
 
         if (!file_exists($dir)) {
             $this->filesystem->mkdir($dir, 0777);
@@ -159,7 +253,7 @@ class DoctrineCrudGenerator extends Generator
         $entityNamespace = implode('\\', $parts);
 
         $target = sprintf(
-            '%s/Controller/%s/%sController.php',
+            '%s/Controller/Crud/%s/Base%sController.php',
             $dir,
             str_replace('\\', '/', $entityNamespace),
             $entityClass
@@ -169,19 +263,41 @@ class DoctrineCrudGenerator extends Generator
             throw new \RuntimeException('Unable to generate the controller as it already exists.');
         }
 
-        $this->renderFile('crud/controller.php.twig', $target, array(
-            'actions' => $this->actions,
-            'route_prefix' => $this->routePrefix,
-            'route_name_prefix' => $this->routeNamePrefix,
-            'bundle' => $this->bundle->getName(),
-            'entity' => $this->entity,
+        $this->renderFile('crud/base.controller.php.twig', $target, array(
             'entity_singularized' => $this->entitySingularized,
             'entity_pluralized' => $this->entityPluralized,
-            'entity_class' => $entityClass,
-            'namespace' => $this->bundle->getNamespace(),
-            'entity_namespace' => $entityNamespace,
-            'format' => $this->format,
+            'actions'           => $this->actions,
+            'route_prefix'      => $this->routePrefix,
+            'route_name_prefix' => $this->routeNamePrefix,
+            'bundle'            => $this->bundle->getName(),
+            'entity'            => $this->entity,
+            'identifier'        => $this->metadata->identifier,
+            'entity_class'      => $entityClass,
+            'namespace'         => $this->bundle->getNamespace(),
+            'entity_namespace'  => $entityNamespace,
+            'format'            => $this->format,
         ));
+        
+        $target = sprintf(
+            '%s/Controller/Crud/%s/%sController.php',
+            $dir,
+            str_replace('\\', '/', $entityNamespace),
+            $entityClass
+        );
+        
+        if (!file_exists($target))
+          $this->renderFile('crud/child.controller.php.twig', $target, array(
+              'actions'           => $this->actions,
+              'route_prefix'      => $this->routePrefix,
+              'route_name_prefix' => $this->routeNamePrefix,
+              'bundle'            => $this->bundle->getName(),
+              'entity'            => $this->entity,
+              'identifier'        => $this->metadata->identifier,
+              'entity_class'      => $entityClass,
+              'namespace'         => $this->bundle->getNamespace(),
+              'entity_namespace'  => $entityNamespace,
+              'format'            => $this->format,
+          ));
     }
 
     /**
@@ -197,15 +313,16 @@ class DoctrineCrudGenerator extends Generator
         $target = $dir.'/'.str_replace('\\', '/', $entityNamespace).'/'.$entityClass.'ControllerTest.php';
 
         $this->renderFile('crud/tests/test.php.twig', $target, array(
-            'route_prefix' => $this->routePrefix,
+            'route_prefix'      => $this->routePrefix,
             'route_name_prefix' => $this->routeNamePrefix,
-            'entity' => $this->entity,
-            'bundle' => $this->bundle->getName(),
-            'entity_class' => $entityClass,
-            'namespace' => $this->bundle->getNamespace(),
-            'entity_namespace' => $entityNamespace,
-            'actions' => $this->actions,
-            'form_type_name' => strtolower(str_replace('\\', '_', $this->bundle->getNamespace()).($parts ? '_' : '').implode('_', $parts).'_'.$entityClass),
+            'entity'            => $this->entity,
+            'identifier'        => $this->metadata->identifier,
+            'bundle'            => $this->bundle->getName(),
+            'entity_class'      => $entityClass,
+            'namespace'         => $this->bundle->getNamespace(),
+            'entity_namespace'  => $entityNamespace,
+            'actions'           => $this->actions,
+            'form_type_name'    => strtolower(str_replace('\\', '_', $this->bundle->getNamespace()).($parts ? '_' : '').implode('_', $parts).'_'.$entityClass),
         ));
     }
 
@@ -216,18 +333,32 @@ class DoctrineCrudGenerator extends Generator
      */
     protected function generateIndexView($dir)
     {
+      if(!file_exists($dir.'/index.html.twig'))
         $this->renderFile('crud/views/index.html.twig.twig', $dir.'/index.html.twig', array(
-            'bundle' => $this->bundle->getName(),
-            'entity' => $this->entity,
             'entity_pluralized' => $this->entityPluralized,
             'entity_singularized' => $this->entitySingularized,
-            'identifier' => $this->metadata->identifier[0],
-            'fields' => $this->metadata->fieldMappings,
-            'actions' => $this->actions,
-            'record_actions' => $this->getRecordActions(),
-            'route_prefix' => $this->routePrefix,
+            'bundle'            => $this->bundle->getName(),
+            'entity'            => $this->entity,
+            'identifier'        => $this->metadata->identifier,
+            'fields'            => $this->fields,
+            'mappings'          => $this->mappings,
+            'actions'           => $this->actions,
+            'record_actions'    => $this->getRecordActions(),
+            'route_prefix'      => $this->routePrefix,
             'route_name_prefix' => $this->routeNamePrefix,
         ));
+
+      $this->renderFile('crud/views/base/index.html.twig.twig', $dir.'/base/index.html.twig', array(
+          'bundle'            => $this->bundle->getName(),
+          'entity'            => $this->entity,
+          'identifier'        => $this->metadata->identifier,
+          'fields'            => $this->fields,
+          'mappings'          => $this->mappings,
+          'actions'           => $this->actions,
+          'record_actions'    => $this->getRecordActions(),
+          'route_prefix'      => $this->routePrefix,
+          'route_name_prefix' => $this->routeNamePrefix,
+      ));
     }
 
     /**
@@ -237,16 +368,28 @@ class DoctrineCrudGenerator extends Generator
      */
     protected function generateShowView($dir)
     {
+      if(!file_exists($dir.'/show.html.twig'))
         $this->renderFile('crud/views/show.html.twig.twig', $dir.'/show.html.twig', array(
-            'bundle' => $this->bundle->getName(),
-            'entity' => $this->entity,
             'entity_singularized' => $this->entitySingularized,
-            'identifier' => $this->metadata->identifier[0],
-            'fields' => $this->metadata->fieldMappings,
-            'actions' => $this->actions,
-            'route_prefix' => $this->routePrefix,
+            'bundle'            => $this->bundle->getName(),
+            'entity'            => $this->entity,
+            'identifier'        => $this->metadata->identifier,
+            'fields'            => $this->fields,
+            'mappings'          => $this->mappings,
+            'actions'           => $this->actions,
+            'route_prefix'      => $this->routePrefix,
             'route_name_prefix' => $this->routeNamePrefix,
         ));
+      $this->renderFile('crud/views/base/show.html.twig.twig', $dir.'/base/show.html.twig', array(
+          'bundle'            => $this->bundle->getName(),
+          'entity'            => $this->entity,
+          'identifier'        => $this->metadata->identifier,
+          'fields'            => $this->fields,
+          'mappings'          => $this->mappings,
+          'actions'           => $this->actions,
+          'route_prefix'      => $this->routePrefix,
+          'route_name_prefix' => $this->routeNamePrefix,
+      ));
     }
 
     /**
@@ -256,6 +399,7 @@ class DoctrineCrudGenerator extends Generator
      */
     protected function generateNewView($dir)
     {
+      if(!file_exists($dir.'/new.html.twig'))
         $this->renderFile('crud/views/new.html.twig.twig', $dir.'/new.html.twig', array(
             'bundle' => $this->bundle->getName(),
             'entity' => $this->entity,
@@ -265,6 +409,13 @@ class DoctrineCrudGenerator extends Generator
             'actions' => $this->actions,
             'fields' => $this->metadata->fieldMappings,
         ));
+      $this->renderFile('crud/views/base/new.html.twig.twig', $dir.'/base/new.html.twig', array(
+          'bundle'            => $this->bundle->getName(),
+          'entity'            => $this->entity,
+          'route_prefix'      => $this->routePrefix,
+          'route_name_prefix' => $this->routeNamePrefix,
+          'actions'           => $this->actions,
+      ));
     }
 
     /**
@@ -274,16 +425,26 @@ class DoctrineCrudGenerator extends Generator
      */
     protected function generateEditView($dir)
     {
+      if(!file_exists($dir.'/edit.html.twig'))
         $this->renderFile('crud/views/edit.html.twig.twig', $dir.'/edit.html.twig', array(
             'route_prefix' => $this->routePrefix,
             'route_name_prefix' => $this->routeNamePrefix,
-            'identifier' => $this->metadata->identifier[0],
-            'entity' => $this->entity,
             'entity_singularized' => $this->entitySingularized,
-            'fields' => $this->metadata->fieldMappings,
-            'bundle' => $this->bundle->getName(),
-            'actions' => $this->actions,
+            'identifier'        => $this->metadata->identifier,
+            'entity'            => $this->entity,
+            'fields'            => $this->metadata->fieldMappings,
+            'bundle'            => $this->bundle->getName(),
+            'actions'           => $this->actions,
         ));
+      $this->renderFile('crud/views/base/edit.html.twig.twig', $dir.'/base/edit.html.twig', array(
+          'route_prefix'      => $this->routePrefix,
+          'route_name_prefix' => $this->routeNamePrefix,
+          'identifier'        => $this->metadata->identifier,
+          'entity'            => $this->entity,
+          'fields'            => $this->metadata->fieldMappings,
+          'bundle'            => $this->bundle->getName(),
+          'actions'           => $this->actions,
+      ));
     }
 
     /**
@@ -307,4 +468,12 @@ class DoctrineCrudGenerator extends Generator
 
         return $prefix;
     }
+    
+    protected function getEntityMetadata($entity)
+    {
+        $factory = new DisconnectedMetadataFactory($this->doctrine);
+
+        return $factory->getClassMetadata($entity)->getMetadata();
+    }
+
 }

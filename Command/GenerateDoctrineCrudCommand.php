@@ -325,7 +325,8 @@ EOT
     {
         return new DoctrineCrudGenerator(
             $this->getContainer()->get('filesystem'),
-            $this->getContainer()->getParameter('kernel.root_dir')
+            $this->getContainer()->getParameter('kernel.root_dir'), 
+            $this->getContainer()->get('doctrine')
         );
     }
 
@@ -343,4 +344,5 @@ EOT
     {
         $this->formGenerator = $formGenerator;
     }
+    
 }

@@ -68,9 +68,9 @@ class DoctrineFormGenerator extends Generator
             throw new \RuntimeException(sprintf('Unable to generate the %s form class as it already exists under the %s file', $this->className, $this->classPath));
         }
 
-        if (count($metadata->identifier) > 1) {
-            throw new \RuntimeException('The form generator does not support entity classes with multiple primary keys.');
-        }
+//         if (count($metadata->identifier) > 1) {
+//             throw new \RuntimeException('The form generator does not support entity classes with multiple primary keys.');
+//         }
 
         $parts = explode('\\', $entity);
         array_pop($parts);
@@ -108,13 +108,25 @@ class DoctrineFormGenerator extends Generator
         if (!$metadata->isIdentifierNatural()) {
             $fields = array_diff($fields, $metadata->identifier);
         }
-
-        foreach ($metadata->associationMappings as $fieldName => $relation) {
+        
+        $fieldsInfos = array();
+        foreach($fields as $field)
+          $fieldsInfos[$field] = $metadata->getFieldMapping($field);
+          
+        foreach ($metadata->getAssociationMappings() as $fieldName => $relation) {
             if ($relation['type'] !== ClassMetadataInfo::ONE_TO_MANY) {
-                $fields[] = $fieldName;
+                $fieldsInfos[$fieldName] = array('type' => $relation['type']);
             }
+            if ($relation['type'] === ClassMetadataInfo::MANY_TO_ONE) {
+              foreach($relation["joinColumns"] as $col) {
+                if(!$metadata->isIdentifier($col["name"]))
+                  unset($fieldsInfos[$col["name"]]);
+              }
+           }
         }
+        
+        
 
-        return $fields;
+        return $fieldsInfos;
     }
 }

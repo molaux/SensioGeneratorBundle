@@ -36,7 +36,7 @@ class ControllerGenerator extends Generator
     public function generate(BundleInterface $bundle, $controller, $routeFormat, $templateFormat, array $actions = array())
     {
         $dir = $bundle->getPath();
-        $controllerFile = $dir.'/Controller/'.$controller.'Controller.php';
+        $controllerFile = $dir.'/Controller/Crud/'.$controller.'Controller.php';
         if (file_exists($controllerFile)) {
             throw new \RuntimeException(sprintf('Controller "%s" already exists', $controller));
         }
@@ -61,15 +61,13 @@ class ControllerGenerator extends Generator
             $template = $actions[$i]['template'];
             if ('default' == $template) {
                 @trigger_error('The use of the "default" keyword is deprecated. Use the real template name instead.', E_USER_DEPRECATED);
-                $template = $bundle->getName().':'.$controller.':'.
-                    strtolower(preg_replace(array('/([A-Z]+)([A-Z][a-z])/', '/([a-z\d])([A-Z])/'), array('\\1_\\2', '\\1_\\2'), strtr(substr($actionName, 0, -6), '_', '.')))
-                    .'.html.'.$templateFormat;
+                $template = $bundle->getName().':Crud\\'.$controller.':'.substr($action['name'], 0, -6).'.html.'.$templateFormat;
             }
 
             if ('twig' == $templateFormat) {
-                $this->renderFile('controller/Template.html.twig.twig', $dir.'/Resources/views/'.$this->parseTemplatePath($template), $params);
+                $this->renderFile('controller/Template.html.twig.twig', $dir.'/Resources/views/Crud/'.$this->parseTemplatePath($template), $params);
             } else {
-                $this->renderFile('controller/Template.html.php.twig', $dir.'/Resources/views/'.$this->parseTemplatePath($template), $params);
+                $this->renderFile('controller/Template.html.php.twig', $dir.'/Resources/views/Crud/'.$this->parseTemplatePath($template), $params);
             }
 
             $this->generateRouting($bundle, $controller, $actions[$i], $routeFormat);
@@ -95,7 +93,7 @@ class ControllerGenerator extends Generator
             mkdir($dir);
         }
 
-        $controller = $bundle->getName().':'.$controller.':'.$action['basename'];
+        $controller = $bundle->getName().':Crud\\'.$controller.':'.$action['basename'];
         $name = strtolower(preg_replace('/([A-Z])/', '_\\1', $action['basename']));
 
         if ('yml' == $format) {
